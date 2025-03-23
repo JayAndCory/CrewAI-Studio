@@ -61,4 +61,7 @@ def main():
     pages()[ss.page].draw()
     
 if __name__ == '__main__':
+    print("Starting CrewAI Studio")
+    print("DB_URL:" + os.getenv("DB_URL"))
+    print("OPENAI_API_KEY:" + os.getenv("OPENAI_API_KEY"))
     main()
