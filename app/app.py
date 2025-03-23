@@ -1,3 +1,4 @@
+import google.cloud.logging
 import streamlit as st
 from streamlit import session_state as ss
 import db_utils
@@ -11,6 +12,16 @@ from pg_results import PageResults
 from dotenv import load_dotenv
 from llms import load_secrets_fron_env
 import os
+import logging
+
+# Instantiates a client
+client = google.cloud.logging.Client()
+
+# Retrieves a Cloud Logging handler based on the environment
+# you're running in and integrates the handler with the
+# Python logging module. By default this captures all logs
+# at INFO level and higher
+client.setup_logging()
 def pages():
     return {
         'Crews': PageCrews(),
@@ -61,7 +72,5 @@ def main():
     pages()[ss.page].draw()
     
 if __name__ == '__main__':
-    print("Starting CrewAI Studio")
-    print("DB_URL:" + os.getenv("DB_URL"))
-    print("OPENAI_API_KEY:" + os.getenv("OPENAI_API_KEY"))
+    logging.info("Starting CrewAI Studio")
     main()

@@ -3,11 +3,13 @@ import os
 import json
 from my_tools import TOOL_CLASSES
 from sqlalchemy import create_engine, text
+import logging
 
 # If you have an environment variable DB_URL for Postgres, use that. 
 # Otherwise, fallback to local SQLite file: 'sqlite:///crewai.db'
 DEFAULT_SQLITE_URL = 'sqlite:///crewai.db'
 DB_URL = os.getenv('DB_URL', DEFAULT_SQLITE_URL)
+logging.debug(f"DB_URL:{os.getenv("DB_URL")}")
 
 # Create a SQLAlchemy Engine.
 # For example, DB_URL could be:
