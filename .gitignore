@@ -21,3 +21,4 @@ data/*
 db/
 db/*
 stop_venv.bat
+agentops.log
