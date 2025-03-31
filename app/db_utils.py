@@ -1,39 +1,54 @@
-import sqlite3
 import os
 import json
 from my_tools import TOOL_CLASSES
 from sqlalchemy import create_engine, text
+from sqlalchemy.dialects.postgresql import JSON as PostgresJSON
 import logging
 
-# If you have an environment variable DB_URL for Postgres, use that. 
-# Otherwise, fallback to local SQLite file: 'sqlite:///crewai.db'
-DEFAULT_SQLITE_URL = 'sqlite:///crewai.db'
-DB_URL = os.getenv('DB_URL', DEFAULT_SQLITE_URL)
-logging.debug(f"DB_URL:{os.getenv('DB_URL')}")
+# Use environment variable DB_URL for Postgres
+# Default to PostgreSQL connection
+DEFAULT_DB_URL = 'postgresql://postgres:postgres@localhost:5432/crewai'
+DB_URL = os.getenv('DB_URL', DEFAULT_DB_URL)
+logging.debug(f"DB_URL:{DB_URL}")
 
 # Create a SQLAlchemy Engine.
 # For example, DB_URL could be:
 #   "postgresql://username:password@hostname:5432/dbname"
-# or fallback to: "sqlite:///crewai.db"
 engine = create_engine(DB_URL, echo=False)
 
 def get_db_connection():
-    # conn = sqlite3.connect(DB_NAME)
-    # conn.row_factory = sqlite3.Row
-    # return conn
     """
     Return a context-managed connection from the SQLAlchemy engine.
     """
     return engine.connect()
 
 def create_tables():
-    create_sql = text('''
-        CREATE TABLE IF NOT EXISTS entities (
-            id TEXT PRIMARY KEY,
-            entity_type TEXT,
-            data TEXT
-        )
-    ''')
+    """
+    Create the necessary tables if they don't exist.
+    Uses JSON type for the data field in PostgreSQL, or TEXT in other databases.
+    """
+    # Check if we're using PostgreSQL
+    is_postgres = 'postgresql' in DB_URL.lower()
+    
+    if is_postgres:
+        # PostgreSQL version with native JSON type
+        create_sql = text('''
+            CREATE TABLE IF NOT EXISTS entities (
+                id TEXT PRIMARY KEY,
+                entity_type TEXT,
+                data JSONB
+            )
+        ''')
+    else:
+        # Generic version for other databases
+        create_sql = text('''
+            CREATE TABLE IF NOT EXISTS entities (
+                id TEXT PRIMARY KEY,
+                entity_type TEXT,
+                data TEXT
+            )
+        ''')
+    
     with get_db_connection() as conn:
         conn.execute(create_sql)
         conn.commit()
@@ -46,9 +61,13 @@ def initialize_db():
 
 
 def save_entity(entity_type, entity_id, data):
-    # For SQLite ≥ 3.24 and for Postgres, we can do:
-    #   INSERT ... ON CONFLICT(id) DO UPDATE ...
-    # to emulate "INSERT OR REPLACE"
+    """
+    Save an entity to the database.
+    Handles JSON serialization based on database type.
+    """
+    # Check if we're using PostgreSQL
+    is_postgres = 'postgresql' in DB_URL.lower()
+    
     upsert_sql = text('''
         INSERT INTO entities (id, entity_type, data)
         VALUES (:id, :etype, :data)
@@ -56,24 +75,47 @@ def save_entity(entity_type, entity_id, data):
             SET entity_type = EXCLUDED.entity_type,
                 data = EXCLUDED.data
     ''')
+    
     with get_db_connection() as conn:
+        # Always serialize to JSON string for consistency
+        # This ensures compatibility with all database adapters
+        json_data = json.dumps(data)
+        
         conn.execute(
             upsert_sql,
             {
                 "id": entity_id,
                 "etype": entity_type,
-                "data": json.dumps(data),
+                "data": json_data,
             }
         )
         conn.commit()
 
 def load_entities(entity_type):
+    """
+    Load entities of a specific type from the database.
+    Handles JSON deserialization based on database type.
+    """
+    # Check if we're using PostgreSQL
+    is_postgres = 'postgresql' in DB_URL.lower()
+    
     query = text('SELECT id, data FROM entities WHERE entity_type = :etype')
     with get_db_connection() as conn:
         result = conn.execute(query, {"etype": entity_type})
         # result.mappings() gives us rows as dicts (if using SQLAlchemy 1.4+)
         rows = result.mappings().all()
-    return [(row["id"], json.loads(row["data"])) for row in rows]
+    
+    # Process the data based on database type
+    processed_rows = []
+    for row in rows:
+        # Since we're always storing serialized JSON strings now,
+        # we always need to deserialize the data
+        data = row["data"]
+        if isinstance(data, str):
+            data = json.loads(data)
+        processed_rows.append((row["id"], data))
+    
+    return processed_rows
 
 def delete_entity(entity_type, entity_id):
     delete_sql = text('''
@@ -224,26 +266,45 @@ def delete_tool(tool_id):
     delete_entity('tool', tool_id)
 
 def export_to_json(file_path):
+    """
+    Export all entities to a JSON file.
+    Handles JSON deserialization based on database type.
+    """
+    # Check if we're using PostgreSQL
+    is_postgres = 'postgresql' in DB_URL.lower()
+    
     with get_db_connection() as conn:
         # Use SQLAlchemy's text() for raw SQL
         query = text('SELECT * FROM entities')
         result = conn.execute(query)
         
         # Convert to list of dictionaries
-        rows = [
-            {
+        rows = []
+        for row in result:
+            # For PostgreSQL with JSONB, the data might already be deserialized
+            # For other databases, we need to deserialize from JSON string
+            data = row.data
+            if not is_postgres or isinstance(data, str):
+                data = json.loads(data)
+                
+            rows.append({
                 'id': row.id,
                 'entity_type': row.entity_type,
-                'data': json.loads(row.data)
-            }
-            for row in result
-        ]
+                'data': data
+            })
 
         # Write to file
         with open(file_path, 'w') as f:
             json.dump(rows, f, indent=4)
 
 def import_from_json(file_path):
+    """
+    Import entities from a JSON file.
+    Handles JSON serialization based on database type.
+    """
+    # Check if we're using PostgreSQL
+    is_postgres = 'postgresql' in DB_URL.lower()
+    
     with open(file_path, 'r') as f:
         data = json.load(f)
 
@@ -258,12 +319,16 @@ def import_from_json(file_path):
                         data = EXCLUDED.data
             ''')
             
+            # For PostgreSQL with JSONB, we can pass the data directly
+            # For other databases, we need to serialize to JSON string
+            json_data = entity['data'] if is_postgres else json.dumps(entity['data'])
+            
             conn.execute(
                 upsert_sql,
                 {
                     "id": entity['id'],
                     "etype": entity['entity_type'],
-                    "data": json.dumps(entity['data'])
+                    "data": json_data
                 }
             )
             
