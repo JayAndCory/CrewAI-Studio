@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Get database URL from environment or use default
-DEFAULT_DB_URL = 'postgresql://postgres:postgres@localhost:5432/crewai'
+DEFAULT_DB_URL = 'postgresql://postgres:password@postgres:5432/crewai-studio'
 DB_URL = os.getenv('DB_URL', DEFAULT_DB_URL)
 logging.info(f"Using DB_URL: {DB_URL}")
 

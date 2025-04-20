@@ -1,0 +1,8 @@
+{
+    "name": "@jorygroup/crewai-studio",
+    "version": "0.0.1",
+    "description": "A web-based IDE for building and deploying AI agents.",
+    "scripts": {
+        "start": "./run_venv.sh"
+    }
+}

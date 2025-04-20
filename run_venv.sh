@@ -8,5 +8,7 @@ source "$SCRIPT_DIR/venv/bin/activate"
 
 cd "$SCRIPT_DIR"
 
+# source .env
+
 streamlit run app/app.py --server.headless True
 

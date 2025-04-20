@@ -7,7 +7,7 @@ import logging
 
 # Use environment variable DB_URL for Postgres
 # Default to PostgreSQL connection
-DEFAULT_DB_URL = 'postgresql://postgres:postgres@localhost:5432/crewai'
+DEFAULT_DB_URL = 'postgresql://postgres:password@postgres:5432/crewai-studio'
 DB_URL = os.getenv('DB_URL', DEFAULT_DB_URL)
 logging.debug(f"DB_URL:{DB_URL}")
 

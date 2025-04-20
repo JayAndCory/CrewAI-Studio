@@ -16,6 +16,8 @@ def load_secrets_fron_env():
             "LMSTUDIO_API_BASE": os.getenv("LMSTUDIO_API_BASE"),
             "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
             "OLLAMA_HOST": os.getenv("OLLAMA_HOST"),
+            "OPENROUTER_API_KEY": os.getenv("OPENROUTER_API_KEY"),
+            "OPENROUTER_API_BASE": os.getenv("OPENROUTER_API_BASE", "https://api.openrouter.ai/v1/"),
         }
     else:
         st.session_state.env_vars = st.session_state.env_vars
@@ -35,6 +37,18 @@ def restore_environment():
 
 def safe_pop_env_var(key):
     os.environ.pop(key, None)
+
+def create_openrouter_llm(model, temperature):
+    switch_environment({
+        "OPENROUTER_API_KEY": st.session_state.env_vars["OPENROUTER_API_KEY"],
+        "OPENROUTER_API_BASE": st.session_state.env_vars["OPENROUTER_API_BASE"],
+    })
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    api_base = os.getenv("OPENROUTER_API_BASE")
+    if api_key:
+        return LLM(model=model, temperature=temperature, base_url=api_base)
+    else:
+        raise ValueError("OpenRouter API key not set in .env file")
 
 def create_openai_llm(model, temperature):
     switch_environment({
@@ -124,6 +138,10 @@ LLM_CONFIG = {
     "LM Studio": {
         "models": ["lms-default"],
         "create_llm": create_lmstudio_llm,
+    },
+    "OpenRouter": {
+        "models": os.getenv("OPENROUTER_MODELS", "").split(",") if os.getenv("OPENROUTER_MODELS") else ["openrouter/quasar-alpha", "google/gemini-flash-1.5-8b", "google/gemini-2.0-flash-lite-001", "google/gemini-flash-1.5"],
+        "create_llm": create_openrouter_llm,
     },
 }
 
